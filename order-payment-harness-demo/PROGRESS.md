@@ -15,17 +15,22 @@
 - 创建功能清单。
 - 创建执行计划。
 - 初始化 Java Spring Boot 项目。
-
-## 进行中
-
-- Step 1：创建领域模型。
-
-## 待完成
-
 - 创建 Order。
 - 创建 OrderItem。
 - 创建 OrderStatus。
 - 创建 PaymentTransaction。
+- 为 Order 增加 markPaid() 领域方法。
+- 增加领域单元测试。
+
+## 进行中
+
+- Step 2：创建数据库 migration。
+
+## 待完成
+
+- 创建 orders 表。
+- 创建 order_items 表。
+- 创建 payment_transactions 表。
 - 实现订单创建功能。
 - 实现支付回调功能。
 
@@ -37,3 +42,4 @@
 
 - 2026-06-29：执行 `./gradlew test`，通过。
 - 2026-06-29：复核 Step 0，执行 `./gradlew test`，通过。
+- 2026-06-29：完成 Step 1，执行 `./gradlew test`，通过。
