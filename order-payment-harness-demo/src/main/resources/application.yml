@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: order-payment-harness-demo
+  datasource:
+    url: jdbc:postgresql://localhost:5432/order_payment
+    username: order_payment
+    password: order_payment
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
