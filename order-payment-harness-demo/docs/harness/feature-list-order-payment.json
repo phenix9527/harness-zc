@@ -1,0 +1,60 @@
+{
+  "epic": "订单创建与支付确认链路",
+  "features": [
+    {
+      "id": "F001",
+      "name": "创建待支付订单",
+      "scope": [
+        "新增 POST /api/v1/orders",
+        "校验商品存在且可售",
+        "校验库存是否充足",
+        "创建 PENDING_PAYMENT 订单",
+        "返回 orderId、orderStatus、payableAmount、paymentToken"
+      ],
+      "out_of_scope": [
+        "不实现支付回调",
+        "不接入真实支付平台",
+        "不实现优惠券",
+        "不实现退款"
+      ],
+      "acceptance_criteria": [
+        "创建成功返回 PENDING_PAYMENT",
+        "库存不足返回明确错误",
+        "非法商品返回明确错误",
+        "包含单元测试",
+        "包含 API 集成测试"
+      ],
+      "verification": [
+        "./gradlew test",
+        "./gradlew integrationTest"
+      ]
+    },
+    {
+      "id": "F002",
+      "name": "支付成功回调",
+      "scope": [
+        "新增 POST /api/v1/payments/callback",
+        "校验支付签名",
+        "根据 transactionId 幂等处理",
+        "订单状态变更为 PAID",
+        "发布 OrderPaidEvent"
+      ],
+      "out_of_scope": [
+        "不实现退款",
+        "不实现分账",
+        "不实现支付超时关闭"
+      ],
+      "acceptance_criteria": [
+        "重复回调只处理一次",
+        "签名错误返回 401",
+        "订单不存在返回明确错误",
+        "OrderPaidEvent 只发布一次"
+      ],
+      "verification": [
+        "./gradlew test",
+        "./gradlew integrationTest",
+        "./gradlew clean check"
+      ]
+    }
+  ]
+}
