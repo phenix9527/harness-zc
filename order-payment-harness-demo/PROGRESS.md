@@ -21,16 +21,17 @@
 - 创建 PaymentTransaction。
 - 为 Order 增加 markPaid() 领域方法。
 - 增加领域单元测试。
+- 创建 orders 表 Flyway migration。
+- 创建 order_items 表 Flyway migration。
+- 创建 payment_transactions 表 Flyway migration。
+- 增加必要索引和 transaction_id 唯一约束。
 
 ## 进行中
 
-- Step 2：创建数据库 migration。
+- Step 3：实现创建订单用例。
 
 ## 待完成
 
-- 创建 orders 表。
-- 创建 order_items 表。
-- 创建 payment_transactions 表。
 - 实现订单创建功能。
 - 实现支付回调功能。
 
@@ -43,3 +44,4 @@
 - 2026-06-29：执行 `./gradlew test`，通过。
 - 2026-06-29：复核 Step 0，执行 `./gradlew test`，通过。
 - 2026-06-29：完成 Step 1，执行 `./gradlew test`，通过。
+- 2026-06-29：完成 Step 2，执行 `./gradlew integrationTest`，通过。
