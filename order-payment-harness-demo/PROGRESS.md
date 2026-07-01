@@ -27,14 +27,15 @@
 - 增加必要索引和 transaction_id 唯一约束。
 - 实现创建订单用例。
 - 暴露创建订单 API。
+- 实现支付成功回调。
 
 ## 进行中
 
-- Step 4：实现支付回调。
+- Step 5：收尾与后续增强。
 
 ## 待完成
 
-- 实现支付回调功能。
+- 暂无。
 
 ## 阻塞项
 
@@ -48,3 +49,6 @@
 - 2026-06-29：完成 Step 2，执行 `./gradlew integrationTest`，通过。
 - 2026-07-01：完成 F001，执行 `./gradlew test`，通过。
 - 2026-07-01：完成 F001，执行 `./gradlew integrationTest`，通过。
+- 2026-07-01：完成 F002，执行 `./gradlew test`，通过。
+- 2026-07-01：完成 F002，执行 `./gradlew integrationTest`，通过。
+- 2026-07-01：完成 F002，执行 `./gradlew clean check`，通过。
