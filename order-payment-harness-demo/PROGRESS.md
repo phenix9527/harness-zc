@@ -25,14 +25,15 @@
 - 创建 order_items 表 Flyway migration。
 - 创建 payment_transactions 表 Flyway migration。
 - 增加必要索引和 transaction_id 唯一约束。
+- 实现创建订单用例。
+- 暴露创建订单 API。
 
 ## 进行中
 
-- Step 3：实现创建订单用例。
+- Step 4：实现支付回调。
 
 ## 待完成
 
-- 实现订单创建功能。
 - 实现支付回调功能。
 
 ## 阻塞项
@@ -45,3 +46,5 @@
 - 2026-06-29：复核 Step 0，执行 `./gradlew test`，通过。
 - 2026-06-29：完成 Step 1，执行 `./gradlew test`，通过。
 - 2026-06-29：完成 Step 2，执行 `./gradlew integrationTest`，通过。
+- 2026-07-01：完成 F001，执行 `./gradlew test`，通过。
+- 2026-07-01：完成 F001，执行 `./gradlew integrationTest`，通过。
