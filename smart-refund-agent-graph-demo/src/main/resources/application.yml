@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: smart-refund-agent-graph-demo
+  main:
+    banner-mode: "off"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+smart:
+  refund:
+    agent-graph:
+      provider: local
+      model: stub
+      timeout-seconds: 30
