@@ -1,0 +1,174 @@
+server:
+  port: 8080
+  tomcat:
+    # 回调类接口必须给足线程，但也不能无限；结合网关限流一起用
+    threads:
+      max: 200
+      min-spare: 20
+
+spring:
+  application:
+    name: api-demo
+
+  # ---------------- 数据源 ----------------
+  datasource:
+    # 注意点：端口 3307 对应 docker-compose.yml 里 MySQL 的宿主机映射端口
+    # （3306 被本机 mysqld 服务占用）。改容器映射时这里必须同步改。
+    url: jdbc:mysql://127.0.0.1:3307/api_demo?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      # 注意点：连接超时必须设置。默认 30s，DB 抖动时会把 Tomcat 线程全部拖死，
+      # 快速失败 + 上层重试 比 线程堆积 好得多
+      connection-timeout: 3000
+      # 注意点：写接口要防「长事务占连接」，MySQL 侧也设 innodb_lock_wait_timeout
+      max-lifetime: 1800000
+      pool-name: api-demo-hikari
+
+  # 启动时执行 schema.sql 建表（脚本用 CREATE TABLE IF NOT EXISTS，可重复执行）。
+  # 生产环境：务必改成 never，DDL 走统一的发布流程，别让应用带 DDL 权限跑。
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      continue-on-error: false
+
+  # ---------------- Redis ----------------
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    # 注意点：超时必须显式设置且要短。默认无超时会让业务线程无限挂住，
+    # 一次 Redis 抖动直接雪崩整个服务
+    timeout: 800ms
+    lettuce:
+      pool:
+        max-active: 32
+        max-idle: 16
+        min-idle: 4
+        max-wait: 500ms
+      shutdown-timeout: 200ms
+
+  # ---------------- RabbitMQ ----------------
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    # 注意点：不用 guest/guest。guest 只允许从容器 loopback 登录，
+    # 宿主机走端口映射进来会被拒（PLAIN login refused），必须用自建账号。
+    username: admin
+    password: admin123
+    publisher-confirm-type: correlated   # 发送确认：延迟消息丢了要能感知
+    publisher-returns: true
+    listener:
+      simple:
+        # 注意点：手动 ack 才能保证「处理成功才摘消息」；自动 ack 在消费异常时会丢消息
+        acknowledge-mode: manual
+        # 注意点：prefetch 控制单消费者未 ack 的消息数。设太大 = 内存里堆一堆未处理消息，
+        # 消费者一挂全部重投；设 1 最安全，吞吐不够再往上调
+        prefetch: 1
+        concurrency: 2
+        max-concurrency: 8
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+
+# ---------------- MyBatis ----------------
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 注意点：必须设置语句超时。一条没走索引的 SQL 能把连接池占满
+    default-statement-timeout: 3
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  # 注意：不配 type-aliases-package。本工程的 SQL 全部用注解写死列名与返回类型，
+  # 不依赖别名；别名包写错（尤其带 ** 通配）在启动时才暴露，排查成本高。
+
+# ---------------- 业务开关（全部走配置，不硬编码） ----------------
+demo:
+  coupon:
+    # 用户 idempotent 标记在 Redis 的存活时间（秒），建议 >= 活动时长 + 7 天余量
+    user-mark-ttl-seconds: 604800
+    # 启动时预热「进行中」活动的库存（没预热 = Lua 按库存 0 处理 = 一发就抢光）
+    warm-up-on-startup: true
+    # 库存 key 的存活时间（小时）：必须覆盖「活动结束 + 余量」，否则活动中 key 过期 = 全场抢光
+    stock-key-ttl-hours: 72
+    # 领取接口限流：用户维度 / IP 维度
+    user-limit-per-second: 1
+    ip-limit-per-minute: 10
+  sms:
+    # 验证码有效期（秒）
+    code-ttl-seconds: 300
+    # 三档频控：60 秒 1 次 / 1 小时 5 次 / 24 小时 20 次
+    window-60s-limit: 1
+    window-1h-limit: 5
+    window-24h-limit: 20
+  export:
+    # 导出结果文件有效期（小时），过期由定时任务清理
+    file-expire-hours: 168
+    result-base-url: https://static.example.com/export/
+    local-dir: ./data/export
+    # 单次导出最大行数，防止一个查询把 DB 和内存打爆
+    max-rows: 200000
+  order:
+    # 订单超时时间（分钟），必须与延迟队列的 TTL 保持一致
+    timeout-minutes: 30
+  pay:
+    wx:
+      # 验签密钥：生产环境放配置中心/KMS，禁止硬编码进代码和 Git
+      api-v3-key: change-me-in-config-center
+
+  # ---------------- 本地缓存（Caffeine） ----------------
+  cache:
+    activity:
+      # 本地缓存 TTL（毫秒）：越短越安全，越长越省 Redis
+      # 注意：这个值直接决定「运营停活动后多久全量生效」，改大前先想清楚运维能否接受
+      local-ttl-millis: 5000
+      # 本地缓存容量上限：必须给。无界本地缓存 = 内存泄漏，最终表现为 Full GC 频繁/OOM
+      local-max-size: 10000
+      # Redis 层 TTL（秒）：跨实例共享，比本地长
+      redis-ttl-seconds: 60
+
+  # ---------------- 分布式锁（Redisson） ----------------
+  lock:
+    # 看门狗超时（毫秒）：续期间隔 = 该值/3，也是「进程被 kill 后锁最长多久自动释放」
+    # 调大 → 崩溃后任务被卡很久；调小 → 续期太频繁，一次长 GC 就可能误释放
+    watchdog-timeout-millis: 30000
+    # Redisson 连接池：只服务分布式锁，不必很大，但也不能太小（锁获取是同步阻塞的）
+    pool-size: 16
+
+# ---------------- 可观测（Actuator） ----------------
+# 注意点：★ 生产环境绝不能这样裸奔对外：
+#   1) 至少要 management.server.port 单独端口 + 网关鉴权，别和业务端口共用；
+#   2) show-details 用 when-authorized，always 会把数据库连接串、组件内部状态暴露出去；
+#   3) 只暴露运维真正会用的端点，env/beans/configprops/heapdump 这类属于信息泄露重灾区。
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # 本地开发 always 方便排查；生产改 when-authorized
+      show-details: always
+      probes:
+        # 暴露 /actuator/health/liveness、/readiness，给 K8s 探针用
+        enabled: true
+  metrics:
+    tags:
+      application: api-demo
+
+info:
+  app:
+    name: api-demo
+    desc: 微服务接口设计小场景最佳实践（优惠券/支付回调/短信/超时关单/异步导出）
+
+logging:
+  level:
+    com.zc.api.demo: debug
+    # 排查 SQL 时打开；平时关掉，否则日志量翻十倍
+    com.zc.api.demo.**.mapper: debug
+  pattern:
+    # traceId 打进日志，是全链路排查的前提
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %X{traceId} %logger{36} - %msg%n"

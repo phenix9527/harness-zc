@@ -1,0 +1,107 @@
+# ============================================================================
+# api-demo 本地开发中间件编排：MySQL 8 / Redis 7 / RabbitMQ 3.13
+#
+#   启动： docker compose up -d
+#   停止： docker compose down            （保留数据卷）
+#   清空： docker compose down -v         （连数据一起删，慎用）
+#   看日志： docker compose logs -f mysql
+#
+# 说明：只建库表结构，不建表。建表交给应用启动时的 spring.sql.init
+#      （schema.sql 全是 CREATE TABLE IF NOT EXISTS，可重复执行）。
+# ============================================================================
+name: apidemo
+
+services:
+  # ---------------- MySQL ----------------
+  mysql:
+    image: mysql:8.0
+    container_name: apidemo-mysql
+    restart: unless-stopped
+    ports:
+      # 注意点：宿主机 3306 已被本机 mysqld 服务占用（elsreport 在用），
+      # 所以这里映射到 3307 —— application.yml 的数据源端口必须与之一致。
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      # 容器起库时只创建 database，不导入任何表
+      MYSQL_DATABASE: api_demo
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      # 注意点：与「写接口防长事务占连接」配套。默认 50s 会让一个卡住的
+      # 事务把 Hikari 连接池拖满；5s 快速失败，让上层重试或报错。
+      - --innodb-lock-wait-timeout=5
+      # 注意点：binlog 保留期别开太大，本地开发盘会涨得很快
+      - --binlog-expire-logs-seconds=86400
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 有 healthcheck 才能让 depends_on 的 service_healthy 真正生效
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # ---------------- Redis ----------------
+  redis:
+    image: redis:7-alpine
+    container_name: apidemo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      # 注意点：必须开 AOF。本工程把「活动库存预扣」「短信频控计数」「notifyId 去重」
+      # 都放在 Redis 上，纯 RDB 崩溃会丢最近几分钟的数据：
+      # 库存丢了是少卖，去重标记丢了是多发短信 —— 后者是真金白银。
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      # 注意点：★ 策略必须是 noeviction，绝不能是 allkeys-lru。
+      # 库存 key 被 LRU 淘汰 = Lua 读到 0 = 全场「已抢光」，且没有任何报错。
+      # 内存不够宁可写失败（业务侧会看到异常），也不能静默丢 key。
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ---------------- RabbitMQ ----------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: apidemo-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # 管理台 http://localhost:15672
+    environment:
+      # 注意点：★ 不要用默认 guest/guest。RabbitMQ 的 guest 账号只允许
+      # 从容器 loopback 登录，宿主机通过端口映射进来的连接会被判定为非 localhost，
+      # 直接 PLAIN login refused。所以必须另建账号。
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_VHOST: "/"
+      TZ: Asia/Shanghai
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:

@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.zc</groupId>
+    <artifactId>api-demo</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>api-demo</name>
+    <description>api-demo</description>
+    <properties>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>2.7.6</spring-boot.version>
+        <!-- Redisson 3.17.x 是兼容 Spring Boot 2.7 + Java 8 的一条稳定线 -->
+        <redisson.version>3.17.7</redisson.version>
+    </properties>
+    <dependencies>
+        <!-- Web + Jackson：REST 接口、@Valid、@RestControllerAdvice -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JSR-303 参数校验：@NotBlank/@NotNull 等（场景1/3/5 契约层） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Redis：Lettuce 客户端。用途：库存预扣、用户幂等标记、频控、验证码 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- RabbitMQ：延迟消息（TTL + 死信）做订单超时关单、导出任务异步执行 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <!-- MyBatis：CAS 条件更新、唯一索引依赖方 -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+
+        <!-- MySQL 驱动；版本由 spring-boot-dependencies 统一管理 -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- 仅用 RandomStringUtils 生成验证码，可用 JDK 实现替换 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <!--
+          Lombok：编译期生成 getter/setter/构造器/日志对象。
+          注意点：
+            1. 必须是 provided/optional —— 它只在编译期工作，打进 jar 只会白白增大体积，
+               还会和运行环境的其他 agent 冲突。
+            2. 团队协作前提：IDEA 必须装 Lombok 插件并开启 Annotation Processing，
+               否则同事 clone 下来满屏「找不到 getXxx()」。
+            3. 版本由 spring-boot-dependencies 统一管理。
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+          Caffeine：本地缓存。选它而不是 Guava Cache —— Caffeine 是 Guava Cache 的官方推荐替代，
+          命中率与并发表现更好，且 Spring Boot 原生支持（版本由 BOM 管理）。
+        -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!--
+          Actuator：把「可观测」这一列补上 —— 健康检查（DB/Redis/RabbitMQ 通不通）、
+          JVM/HTTP/连接池指标。没有它，线上出问题只能靠猜。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Prometheus 注册表：把 metrics 暴露成 /actuator/prometheus 供抓取；不上报就只是个空壳 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!--
+          Redisson：这里只为了它的分布式锁（看门狗自动续期）。
+          注意点：刻意<b>不用</b> redisson-spring-boot-starter ——
+          那个 starter 会注册 RedissonConnectionFactory 去抢占 Lettuce 的 ConnectionFactory，
+          让 RedisTemplate 悄悄换客户端。我们只要锁，就用裸 redisson 在 RedisConfig 里显式建 Bean。
+        -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>${redisson.version}</version>
+        </dependency>
+
+        <!--
+          测试依赖：<b>团队统一 JUnit 4 + Mockito</b>，不用 JUnit 5。
+          注意点：
+            1. spring-boot-starter-test 默认（2.2+）带的是 JUnit 5（junit-jupiter），
+               必须显式排除，否则 surefire 会优先选 JUnitPlatformProvider，
+               项目里会同时存在两套注解、两套断言，新人写测试必然写错。
+            2. mockito-junit-jupiter 也一起排掉：它只为 JUnit 5 服务，
+               留着就等于留了一扇「不小心又写回 JUnit 5」的暗门。
+               JUnit 4 的 runner（MockitoJUnitRunner）在 mockito-core 里，不需要额外依赖。
+            3. JUnit 4 的版本由 spring-boot-dependencies 统一管理（4.13.2），
+               不要手写版本，否则和 Mockito 的兼容性要自己扛。
+            4. 4.13+ 才有 Assert.assertThrows，4.12 及以前只能用 ExpectedException Rule，
+               那种写法会把「哪一行抛的」这种信息丢掉。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.junit.jupiter</groupId>
+                    <artifactId>junit-jupiter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>mockito-junit-jupiter</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- JUnit 4（测试框架主线）+ 其自带的 hamcrest-core -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <configuration>
+                    <mainClass>com.zc.api.demo.ApiDemoApplication</mainClass>
+                    <!--
+                      ⚠️ 这里绝对不要加 <skip>true</skip>。
+                      repackage 被 skip 之后，package 产出的只是 maven-jar-plugin 打的普通 jar：
+                      没有依赖、没有 Main-Class，执行 java -jar 会报「没有主清单属性」。
+                      更坑的是构建依然 BUILD SUCCESS，问题只在运行时暴露。
+                      需要临时跳过时用命令行参数：-Dspring-boot.repackage.skip=true（别写进 pom）。
+                    -->
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <!--
+                      Provider 说明（改成 JUnit 4 后为什么还要显式写这一段）：
+                      surefire 是按 classpath 自动挑 provider 的 —— 只要 classpath 上同时出现
+                      junit-platform-engine + junit-jupiter-engine/vintage-engine，它就切到
+                      JUnitPlatformProvider，JUnit 4 的 @Test 会一个都跑不到（Tests run: 0，且不报错）。
+                      本项目已排除 junit-jupiter，所以走的是 surefire-junit4 provider。
+                      ⚠️ 谁哪天为了别的目的把 junit-jupiter 加回来，这里必须重新确认，否则测试会静默空跑。
+                    -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
+                    <!--
+                      这个项目是「可运行的完整 demo」，默认不跳过测试；需要跳过时用 -DskipTests。
+                      注意：一旦接进公司的 CI 流水线，跳过策略要跟团队约定对齐，别用默认值蒙过去。
+                    -->
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
